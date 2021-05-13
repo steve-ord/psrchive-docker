@@ -1,10 +1,42 @@
-FROM ubuntu:16.04
+#FROM ubuntu:16.04
+#FROM ubuntu:xenial-20160923.1
+FROM ubuntu:bionic
+# Original maintainer
+#MAINTAINER Ewan Barr "ebarr@mpifr-bonn.mpg.de"
+#Current MAINTAINER
+MAINTAINER Stephen Ord "stephen.ord@csiro.au"
+
+# Suppress debconf warnings
+ENV DEBIAN_FRONTEND noninteractive
+
+# Switch account to root and adding user accounts and password
+USER root
+RUN echo "root:root" | chpasswd && \
+    mkdir -p /root/.ssh 
+
+# Create psr user which will be used to run commands with reduced privileges.
+RUN adduser --disabled-password --gecos 'unprivileged user' psr && \
+    echo "psr:psr" | chpasswd && \
+    mkdir -p /home/psr/.ssh && \
+    chown -R psr:psr /home/psr/.ssh
+
+# Create space for ssh daemon and update the system
+RUN echo 'deb http://us.archive.ubuntu.com/ubuntu bionic main multiverse' >> /etc/apt/sources.list && \
+    mkdir -p /var/run/sshd && \
+    mkdir -p /run/sshd && \
+    apt-get -y check && \
+    apt-get -y update && \
+    apt-get install -y apt-utils apt-transport-https software-properties-common python3-software-properties && \
+    apt-get -y update --fix-missing && \
+    apt-get -y upgrade 
 
 # Install dependencies
-RUN echo 'deb http://us.archive.ubuntu.com/ubuntu trusty main multiverse' >> /etc/apt/sources.list && \
+RUN echo 'deb http://us.archive.ubuntu.com/ubuntu bionic main multiverse' >> /etc/apt/sources.list && \
     apt-get update -y && \
     apt-get --no-install-recommends -y install \
     build-essential \
+    ssh \
+    sudo \
     autoconf \
     autotools-dev \
     automake \
@@ -18,7 +50,7 @@ RUN echo 'deb http://us.archive.ubuntu.com/ubuntu trusty main multiverse' >> /et
     git \
     libcfitsio-dev \
     pgplot5 \
-    swig2.0 \
+    swig3.0 \
     python \
     python-dev \
     python-pip \
@@ -27,11 +59,11 @@ RUN echo 'deb http://us.archive.ubuntu.com/ubuntu trusty main multiverse' >> /et
     libfftw3-dev \
     libfftw3-single3 \
     libx11-dev \
-    libpng12-dev \
-    libpng3 \
+    libpng16-16\
+    libpng-dev \
     libpnglite-dev \
-    libhdf5-10 \
-    libhdf5-cpp-11 \
+    libhdf5-100 \
+    libhdf5-cpp-100 \
     libhdf5-dev \
     libhdf5-serial-dev \
     libxml2 \
@@ -39,7 +71,7 @@ RUN echo 'deb http://us.archive.ubuntu.com/ubuntu trusty main multiverse' >> /et
     libltdl-dev \
     gsl-bin \
     libgsl-dev \
-    libgsl2 \
+    libgsl23 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get -y clean
 
@@ -59,16 +91,15 @@ ENV PGPLOT_BACKGROUND white
 ENV PGPLOT_FOREGROUND black
 ENV PGPLOT_DEV /xs
 
-ENV PSRHOME /software/
+USER psr
+ENV HOME /home/psr
+ENV PSRHOME /home/psr/software/
+RUN mkdir -p /home/psr/.ssh
 WORKDIR $PSRHOME 
 
 # Pull all repos
-RUN wget http://www.atnf.csiro.au/people/pulsar/psrcat/downloads/psrcat_pkg.tar.gz && \
-    tar -xvf psrcat_pkg.tar.gz -C $PSRHOME && \
-    git clone https://bitbucket.org/psrsoft/tempo2.git && \
-    git clone git://git.code.sf.net/p/psrchive/code psrchive && \
-    git clone https://github.com/SixByNine/psrxml.git
-
+COPY scripts/get_repos.sh get_repos.sh
+RUN /bin/bash get_repos.sh
 # Psrcat
 ENV PSRCAT_FILE $PSRHOME/psrcat_tar/psrcat.db
 ENV PATH $PATH:$PSRHOME/psrcat_tar
@@ -110,7 +141,7 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$PSRCHIVE/install/lib
 ENV PYTHONPATH $PSRCHIVE/install/lib/python2.7/site-packages
 WORKDIR $PSRCHIVE
 RUN ./bootstrap && \
-    ./configure --prefix=$PSRCHIVE/install --x-libraries=/usr/lib/x86_64-linux-gnu --with-psrxml-dir=$PSRXML/install --enable-shared --enable-static F77=gfortran LDFLAGS="-L"$PSRXML"/install/lib" LIBS="-lpsrxml -lxml2" && \
+    ./configure --prefix=$PSRCHIVE/install --x-libraries=/usr/lib/x86_64-linux-gnu --disable-python --with-psrxml-dir=$PSRXML/install --enable-shared --enable-static F77=gfortran LDFLAGS="-L"$PSRXML"/install/lib" LIBS="-lpsrxml -lxml2" && \
     make -j $(nproc) && \
     make && \
     make install && \
@@ -119,5 +150,22 @@ WORKDIR $PSRHOME
 RUN echo "Predictor::default = tempo2" >> .psrchive.cfg && \
     echo "Predictor::policy = default" >> .psrchive.cfg
 
-ADD scripts/ /scripts/
-WORKDIR /scripts/
+USER root
+# Configure sudo.
+RUN echo 'deb http://us.archive.ubuntu.com/ubuntu bionic main multiverse' >> /etc/apt/sources.list && \
+    apt-get update -y && \
+    apt-get --no-install-recommends -y install \
+    vim \
+    xauth \
+    xorg 
+
+RUN ex +"%s/^%sudo.*$/%sudo ALL=(ALL:ALL) NOPASSWD:ALL/g" -scwq! /etc/sudoers
+RUN usermod -aG sudo psr
+RUN usermod -s /bin/bash psr
+
+ADD bashrc /home/psr/.bashrc
+RUN chown psr:psr /home/psr/.bashrc
+ADD psrchive_user.pub /home/psr/.ssh/authorized_keys
+RUN chown psr:psr /home/psr/.ssh/authorized_keys
+
+USER psr

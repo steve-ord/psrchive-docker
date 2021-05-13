@@ -1,0 +1,15 @@
+version: '2'
+services:
+  presto:
+    build: .
+    container_name: psrchive
+    volumes:
+     - .:/data/
+     - "/var/run/docker.sock:/var/run/docker.sock"
+    hostname: localhost
+    expose:
+     - "22"
+    ports:
+     - "2223:22/tcp"
+    image: "sord/psrchive"
+    command: ["/usr/bin/sudo", "/usr/sbin/sshd", "-D", "-o", "ListenAddress=0.0.0.0", "-o", "X11UseLocalhost=no"] 
