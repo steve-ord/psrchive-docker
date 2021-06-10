@@ -95,11 +95,17 @@ USER psr
 ENV HOME /home/psr
 ENV PSRHOME /home/psr/software/
 RUN mkdir -p /home/psr/.ssh
+RUN mkdir $PSRHOME
 WORKDIR $PSRHOME 
 
+USER root
 # Pull all repos
 COPY scripts/get_repos.sh get_repos.sh
+RUN chown psr get_repos.sh
+
+USER psr
 RUN /bin/bash get_repos.sh
+
 # Psrcat
 ENV PSRCAT_FILE $PSRHOME/psrcat_tar/psrcat.db
 ENV PATH $PATH:$PSRHOME/psrcat_tar
@@ -167,5 +173,5 @@ ADD bashrc /home/psr/.bashrc
 RUN chown psr:psr /home/psr/.bashrc
 ADD psrchive_user.pub /home/psr/.ssh/authorized_keys
 RUN chown psr:psr /home/psr/.ssh/authorized_keys
-
 USER psr
+RUN chmod -R 700 /home/psr/.ssh
