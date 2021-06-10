@@ -159,7 +159,7 @@ RUN echo 'deb http://us.archive.ubuntu.com/ubuntu bionic main multiverse' >> /et
     xauth \
     xorg 
 
-RUN ex +"%s/^%sudo.*$/%sudo ALL=(ALL:ALL) NOPASSWD:ALL/g" -scwq! /etc/sudoers
+RUN sed -i 's/\%sudo/sudo/' /etc/sudoers
 RUN usermod -aG sudo psr
 RUN usermod -s /bin/bash psr
 
