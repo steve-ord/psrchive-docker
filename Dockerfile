@@ -175,3 +175,5 @@ ADD psrchive_user.pub /home/psr/.ssh/authorized_keys
 RUN chown psr:psr /home/psr/.ssh/authorized_keys
 USER psr
 RUN chmod -R 700 /home/psr/.ssh
+EXPOSE 22
+
